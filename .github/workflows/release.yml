@@ -1,0 +1,54 @@
+name: release-pypi
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    name: Build and Publish
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: bump
+        run: |
+          uv version --bump ${{ github.event.inputs.bump_type }}
+          echo "NEW_VERSION=$(uv version | awk '{print $2}')" >> $GITHUB_ENV
+
+      - name: build
+        run: uv build
+
+      - name: publish
+        run: uv publish
+
+      - name: tag release
+        run: |
+          git config --local user.email "release.action@github.com"
+          git config --local user.name "GitHub Release Action"
+          git add pyproject.toml uv.lock
+          git commit -m "prepare for tag release: increment version to ${{ env.NEW_VERSION }}"
+          git tag "v${{ env.NEW_VERSION }}"
+          git push origin HEAD:${{ github.ref_name }} --tags
